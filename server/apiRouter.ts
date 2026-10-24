@@ -34,6 +34,41 @@ apiRouter.use((req: Request, res: Response, next) => {
   next();
 });
 
+export function formatApiError(err: any, fallbackMessage: string = 'Request failed.') {
+  const status = typeof err?.status === 'number' ? err.status : 500;
+  let errorMsg = fallbackMessage;
+  if (typeof err?.message === 'string') {
+    errorMsg = err.message;
+  } else if (typeof err?.error === 'string') {
+    errorMsg = err.error;
+  } else if (typeof err?.message === 'object' && err?.message !== null) {
+    errorMsg = err.message.message || JSON.stringify(err.message);
+  } else if (typeof err?.error === 'object' && err?.error !== null) {
+    errorMsg = err.error.message || JSON.stringify(err.error);
+  }
+
+  let errorCode = 'INTERNAL_ERROR';
+  if (typeof err?.code === 'string') {
+    errorCode = err.code;
+  } else if (typeof err?.code === 'number') {
+    errorCode = String(err.code);
+  }
+
+  const instructions = Array.isArray(err?.instructions)
+    ? err.instructions.map((i: any) => (typeof i === 'string' ? i : JSON.stringify(i)))
+    : [];
+
+  return {
+    status,
+    body: {
+      error: String(errorMsg),
+      code: errorCode,
+      instructions,
+      details: err?.details,
+    },
+  };
+}
+
 // GET /api/health
 apiRouter.get('/health', (req: Request, res: Response) => {
   const hasServerKey = Boolean(process.env.YOUTUBE_API_KEY && process.env.YOUTUBE_API_KEY.trim().length > 0);
@@ -137,13 +172,8 @@ apiRouter.get('/search/youtube', async (req: Request, res: Response) => {
       source: 'youtube',
     });
   } catch (err: any) {
-    const status = err.status || 500;
-    res.status(status).json({
-      error: err.message || 'YouTube search failed.',
-      code: err.code || 'INTERNAL_ERROR',
-      instructions: err.instructions || [],
-      details: err.details,
-    });
+    const { status, body } = formatApiError(err, 'YouTube search failed.');
+    res.status(status).json(body);
   }
 });
 
@@ -231,13 +261,8 @@ apiRouter.get('/search/universal', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (err: any) {
-    const status = err.status || 500;
-    res.status(status).json({
-      error: err.message || 'Search failed.',
-      code: err.code || 'INTERNAL_ERROR',
-      instructions: err.instructions || [],
-      details: err.details,
-    });
+    const { status, body } = formatApiError(err, 'Search failed.');
+    res.status(status).json(body);
   }
 });
 
@@ -269,12 +294,8 @@ apiRouter.get('/videos/:videoId', async (req: Request, res: Response) => {
 
     res.json(video);
   } catch (err: any) {
-    const status = err.status || 500;
-    res.status(status).json({
-      error: err.message || 'Failed to fetch video details.',
-      code: err.code || 'INTERNAL_ERROR',
-      instructions: err.instructions || [],
-    });
+    const { status, body } = formatApiError(err, 'Failed to fetch video details.');
+    res.status(status).json(body);
   }
 });
 

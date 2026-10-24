@@ -180,10 +180,24 @@ export default function App() {
         if (err.name === 'AbortError') return;
 
         const payload = err.payload || {};
+        let rawMessage = payload.error || err.message || 'Unable to retrieve search results.';
+        if (typeof rawMessage === 'object' && rawMessage !== null) {
+          rawMessage = rawMessage.message || JSON.stringify(rawMessage);
+        }
+
+        let rawCode = payload.code || (typeof payload.error === 'object' ? payload.error?.code : undefined);
+        if (typeof rawCode === 'object' && rawCode !== null) {
+          rawCode = rawCode.code || JSON.stringify(rawCode);
+        }
+
         setError({
-          message: payload.error || err.message || 'Unable to retrieve search results.',
-          code: payload.code,
-          instructions: payload.instructions,
+          message: String(rawMessage),
+          code: rawCode ? String(rawCode) : undefined,
+          instructions: Array.isArray(payload.instructions)
+            ? payload.instructions.map((i: any) =>
+                typeof i === 'string' ? i : typeof i?.message === 'string' ? i.message : JSON.stringify(i)
+              )
+            : undefined,
         });
         if (!append) {
           setTracks([]);
@@ -348,11 +362,13 @@ export default function App() {
                     ? 'YouTube API Key Required'
                     : 'Search Request Failed'}
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">{error.message}</p>
-                {error.instructions && error.instructions.length > 0 && (
+                <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                  {typeof error.message === 'string' ? error.message : JSON.stringify(error.message)}
+                </p>
+                {Array.isArray(error.instructions) && error.instructions.length > 0 && (
                   <ul className="text-[11px] text-slate-400 list-disc list-inside space-y-0.5 pt-1">
                     {error.instructions.map((inst, i) => (
-                      <li key={i}>{inst}</li>
+                      <li key={i}>{typeof inst === 'string' ? inst : JSON.stringify(inst)}</li>
                     ))}
                   </ul>
                 )}

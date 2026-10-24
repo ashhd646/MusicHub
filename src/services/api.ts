@@ -75,13 +75,39 @@ export async function searchUniversalMusic(params: UniversalSearchParams): Promi
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    let msg = 'Search request failed.';
+    let codeStr = 'INTERNAL_ERROR';
+
+    if (data.error) {
+      if (typeof data.error === 'string') {
+        msg = data.error;
+      } else if (typeof data.error === 'object' && data.error !== null) {
+        msg = data.error.message || JSON.stringify(data.error);
+        if (data.error.code) codeStr = String(data.error.code);
+      }
+    } else if (data.message) {
+      if (typeof data.message === 'string') {
+        msg = data.message;
+      } else if (typeof data.message === 'object' && data.message !== null) {
+        msg = data.message.message || JSON.stringify(data.message);
+      }
+    }
+
+    if (data.code) {
+      codeStr = typeof data.code === 'string' ? data.code : String(data.code);
+    }
+
+    const instructions = Array.isArray(data.instructions)
+      ? data.instructions.map((it: any) => (typeof it === 'string' ? it : JSON.stringify(it)))
+      : undefined;
+
     const errorPayload: ApiErrorResponse = {
-      error: data.error || 'Search request failed.',
-      code: data.code || 'INTERNAL_ERROR',
-      instructions: data.instructions,
+      error: msg,
+      code: codeStr as any,
+      instructions,
       details: data.details,
     };
-    const err: any = new Error(errorPayload.error);
+    const err: any = new Error(msg);
     err.payload = errorPayload;
     throw err;
   }
@@ -96,7 +122,15 @@ export async function fetchVideoDetails(videoId: string): Promise<UnifiedTrack> 
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err: any = new Error(data.error || 'Failed to fetch video details');
+    let msg = 'Failed to fetch video details';
+    if (typeof data.error === 'string') {
+      msg = data.error;
+    } else if (typeof data.error === 'object' && data.error !== null) {
+      msg = data.error.message || JSON.stringify(data.error);
+    } else if (typeof data.message === 'string') {
+      msg = data.message;
+    }
+    const err: any = new Error(msg);
     err.payload = data;
     throw err;
   }

@@ -747,7 +747,9 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/95 text-slate-200">
                   <AlertCircle className="w-10 h-10 text-amber-400 mb-3" />
                   <h4 className="text-sm font-bold text-white mb-1">Official Playback Restricted</h4>
-                  <p className="text-xs text-slate-400 max-w-md mb-4">{playerError.message}</p>
+                  <p className="text-xs text-slate-400 max-w-md mb-4">
+                    {typeof playerError.message === 'string' ? playerError.message : JSON.stringify(playerError.message)}
+                  </p>
                   <div className="flex items-center gap-3">
                     <a
                       href={currentTrack.externalUrl}

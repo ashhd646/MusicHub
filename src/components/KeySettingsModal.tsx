@@ -49,15 +49,19 @@ export const KeySettingsModal: React.FC<KeySettingsModalProps> = ({
           message: `Verified! Successfully fetched ${data.items.length} YouTube results with this key.`,
         });
       } else {
+        const rawErr = data?.error;
+        const msg = typeof rawErr === 'string'
+          ? rawErr
+          : (typeof rawErr?.message === 'string' ? rawErr.message : (typeof data?.message === 'string' ? data.message : 'Key verification failed with YouTube API.'));
         setTestResult({
           success: false,
-          message: data.error || 'Key verification failed with YouTube API.',
+          message: String(msg),
         });
       }
     } catch (err: any) {
       setTestResult({
         success: false,
-        message: err.message || 'Network test failed.',
+        message: typeof err?.message === 'string' ? err.message : 'Network test failed.',
       });
     } finally {
       setTesting(false);

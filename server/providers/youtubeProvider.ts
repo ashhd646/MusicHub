@@ -154,9 +154,25 @@ export class YouTubeProvider {
             nextPageToken: data.nextPageToken || null,
             totalResults: data.pageInfo?.totalResults || unifiedTracks.length,
           };
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          this.handleApiError(response.status, errData);
         }
-      } catch (apiErr) {
-        console.warn('Official YouTube API request failed, falling back to full web discovery:', apiErr);
+      } catch (apiErr: any) {
+        console.warn('Official YouTube API request failed, checking web fallback:', apiErr?.message || apiErr);
+        try {
+          const webFallback = await this.searchWebYouTube(query, maxResults);
+          if (webFallback.items.length > 0) {
+            return webFallback;
+          }
+        } catch {}
+
+        const cleanMsg = typeof apiErr?.message === 'string' ? apiErr.message : 'YouTube search request failed.';
+        const err: any = new Error(cleanMsg);
+        err.status = apiErr?.status || 500;
+        err.code = apiErr?.code || 'SEARCH_ERROR';
+        err.instructions = Array.isArray(apiErr?.instructions) ? apiErr.instructions : [];
+        throw err;
       }
     }
 
@@ -338,10 +354,12 @@ export class YouTubeProvider {
    * Maps Google API error payloads to structured MusicHub errors
    */
   private handleApiError(status: number, data: any): never {
-    const errorObj = data.error || {};
-    const errorsList = errorObj.errors || [];
+    const errorObj = typeof data?.error === 'object' && data?.error !== null ? data.error : {};
+    const errorsList = Array.isArray(errorObj.errors) ? errorObj.errors : [];
     const firstReason = errorsList[0]?.reason || '';
-    const message = errorObj.message || 'Error occurred while contacting YouTube API.';
+    const message = typeof data?.error === 'string'
+      ? data.error
+      : (typeof errorObj.message === 'string' ? errorObj.message : (typeof data?.message === 'string' ? data.message : 'Error occurred while contacting YouTube API.'));
 
     const err: any = new Error(message);
     err.status = status;

@@ -35,7 +35,11 @@ class ErrorBoundary extends Component<Props, State> {
           </div>
           <h1 className="text-xl font-bold mb-2">MusicHub Loading Error</h1>
           <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
-            {this.state.error?.message || 'An unexpected error occurred while loading the application.'}
+            {typeof this.state.error?.message === 'string'
+              ? this.state.error.message
+              : this.state.error
+              ? JSON.stringify(this.state.error)
+              : 'An unexpected error occurred while loading the application.'}
           </p>
           <div className="flex gap-3">
             <button
