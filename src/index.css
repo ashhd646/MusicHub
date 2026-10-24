@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+body {
+  margin: 0;
+  background-color: #090D16;
+  color: #F8FAFC;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}

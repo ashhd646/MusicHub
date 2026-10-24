@@ -1,0 +1,17 @@
+{
+  "name": "MusicHub — Universal Music Search & Player",
+  "short_name": "MusicHub",
+  "description": "Universal music search, video player and MP3 converter",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090D16",
+  "theme_color": "#090D16",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

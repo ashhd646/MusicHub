@@ -1,0 +1,6 @@
+{
+  "name": "MusicHub — YouTube & Universal Music Search",
+  "description": "Universal music discovery and streaming platform powered by the official YouTube Data API v3 and Jamendo with official IFrame playback and multi-language search.",
+  "requestFramePermissions": ["microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
