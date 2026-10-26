@@ -68,6 +68,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const playerRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const keepAliveAudioRef = useRef<HTMLAudioElement | null>(null);
+  const iframeContainerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -156,12 +157,20 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     }
   }, [currentTrack?.videoId]);
 
-  // Load YouTube IFrame API script once
+  // Load YouTube IFrame API script once with guaranteed polling readiness
   useEffect(() => {
-    if (window.YT && window.YT.Player) {
-      setIsApiReady(true);
-      return;
-    }
+    let interval: any = null;
+
+    const checkReady = () => {
+      if (window.YT && window.YT.Player) {
+        setIsApiReady(true);
+        if (interval) clearInterval(interval);
+        return true;
+      }
+      return false;
+    };
+
+    if (checkReady()) return;
 
     const existingScript = document.getElementById('youtube-iframe-api');
     if (!existingScript) {
@@ -173,8 +182,14 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
     const previousCallback = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
-      if (previousCallback) previousCallback();
+      if (typeof previousCallback === 'function') previousCallback();
       setIsApiReady(true);
+    };
+
+    interval = setInterval(checkReady, 200);
+
+    return () => {
+      if (interval) clearInterval(interval);
     };
   }, []);
 
@@ -312,17 +327,22 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
     if (!currentTrack) {
       if (playerRef.current) {
-        playerRef.current.destroy?.();
+        try { playerRef.current.destroy?.(); } catch {}
         playerRef.current = null;
       }
       return;
     }
 
-    // If audio stream (e.g. Jamendo)
+    // If audio stream (e.g. Jamendo, iTunes preview)
     if (currentTrack.playbackType === 'audio-stream') {
       if (playerRef.current) {
-        playerRef.current.destroy?.();
+        try { playerRef.current.destroy?.(); } catch {}
         playerRef.current = null;
+      }
+      userIntendedPlayingRef.current = true;
+      setIsPlaying(true);
+      if (backgroundPlay) {
+        backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
       }
       return;
     }
@@ -332,15 +352,12 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
     const videoId = currentTrack.videoId;
 
-    // If player already exists, load the new video ID with full unmuted audio
+    // If player already exists, load the new video ID directly
     if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
       try {
         userIntendedPlayingRef.current = true;
         playerRef.current.unMute?.();
         playerRef.current.setVolume?.(volume || 100);
-        if (playbackSpeed !== 1) {
-          playerRef.current.setPlaybackRate?.(playbackSpeed);
-        }
         playerRef.current.loadVideoById({
           videoId,
           startSeconds: 0,
@@ -348,27 +365,32 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         playerRef.current.playVideo?.();
         setIsPlaying(true);
         setIsMuted(false);
-        backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+        if (backgroundPlay) {
+          backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+        }
         return;
       } catch (e) {
-        // Fallback to recreating
+        // Destroy and fall through to re-create
+        try { playerRef.current.destroy?.(); } catch {}
+        playerRef.current = null;
       }
     }
 
-    // Ensure DOM container exists
-    const playerId = 'musichub-yt-iframe-slot';
-    const el = document.getElementById(playerId);
-    if (!el) return;
+    // Ensure DOM container exists and reset its child slot cleanly
+    const container = iframeContainerRef.current;
+    if (!container) return;
+
+    container.innerHTML = '<div id="musichub-yt-iframe-slot" style="width:100%;height:100%;"></div>';
 
     try {
-      playerRef.current = new window.YT.Player(playerId, {
+      playerRef.current = new window.YT.Player('musichub-yt-iframe-slot', {
         videoId,
+        host: 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 1,
           controls: 1,
           modestbranding: 1,
           rel: 0,
-          origin: window.location.origin,
           enablejsapi: 1,
           playsinline: 1,
         },
@@ -378,13 +400,12 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               userIntendedPlayingRef.current = true;
               event.target.unMute();
               event.target.setVolume(volume || 100);
-              if (playbackSpeed !== 1) {
-                event.target.setPlaybackRate(playbackSpeed);
-              }
               event.target.playVideo();
-              backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+              if (backgroundPlay) {
+                backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+              }
             } catch (err) {
-              console.warn('Playback initialization notice:', err);
+              console.warn('Playback ready notice:', err);
             }
             setIsPlaying(true);
             setIsMuted(false);
@@ -395,7 +416,9 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               setIsPlaying(true);
               userIntendedPlayingRef.current = true;
               setPlayerError(null);
-              backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+              if (backgroundPlay) {
+                backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+              }
               try {
                 if (event.target.isMuted()) {
                   setIsMuted(true);
@@ -404,38 +427,25 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 }
               } catch {}
             } else if (event.data === 2) {
-              // Pause event: Check if pause was forced by Chrome background tab throttling / tab switch
-              if (userIntendedPlayingRef.current && (document.hidden || !document.hasFocus())) {
+              // Pause event
+              // Only auto-resume if the browser tab is truly hidden in the background
+              if (document.hidden && backgroundPlay && userIntendedPlayingRef.current) {
                 try {
                   event.target.playVideo();
                 } catch {}
-                // Re-attempt quickly in case browser fires another throttle event
                 setTimeout(() => {
-                  if (userIntendedPlayingRef.current) {
-                    try {
-                      event.target.playVideo();
-                    } catch {}
+                  if (document.hidden && userIntendedPlayingRef.current) {
+                    try { event.target.playVideo(); } catch {}
                   }
-                }, 100);
-                setTimeout(() => {
-                  if (userIntendedPlayingRef.current) {
-                    try {
-                      event.target.playVideo();
-                    } catch {}
-                  }
-                }, 350);
+                }, 150);
                 return;
               }
 
-              // Only update to false if user actually paused
-              if (!userIntendedPlayingRef.current) {
-                setIsPlaying(false);
-                backgroundAudioKeepAlive.stopKeepAlive();
-              }
+              // Normal user pause or video ended in foreground
+              setIsPlaying(false);
             } else if (event.data === 0) {
               // Track has ended!
               if (loopModeRef.current === 'single') {
-                // SONG IN LOOP: seamlessly restart same track from beginning
                 try {
                   event.target.seekTo(0, true);
                   event.target.playVideo();
@@ -445,21 +455,31 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                   console.warn('Loop restart notice:', loopErr);
                 }
               } else {
-                // Next track in queue or queue loop
                 handleNextTrackRef.current();
               }
             }
           },
           onError: (event: any) => {
             const code = event.data;
-            let message = 'An error occurred while loading this YouTube video.';
+            console.warn(`YouTube player code: ${code} for video: ${videoId}`);
+
+            // If video embedding is restricted by owner (101/150) or unavailable (100)
+            if (code === 101 || code === 150 || code === 100) {
+              // Automatically advance to next song in playlist without stopping the session
+              if (playlist && playlist.length > 1) {
+                showToast('⏭️ Stream restricted by owner: Playing next song in queue');
+                setTimeout(() => {
+                  handleNextTrackRef.current();
+                }, 1000);
+                return;
+              }
+            }
+
+            let message = 'This video cannot be played directly.';
             if (code === 101 || code === 150) {
-              message =
-                'Embedding restricted: The owner of this video has disabled playback in third-party embedded players.';
+              message = 'The owner of this video has restricted third-party embedded playback.';
             } else if (code === 100) {
-              message = 'This video does not exist or has been made private.';
-            } else if (code === 2) {
-              message = 'Invalid YouTube video ID parameter.';
+              message = 'This video is private or unavailable.';
             }
             setPlayerError({ code, message });
             setIsPlaying(false);
@@ -469,7 +489,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     } catch (initErr) {
       console.error('Failed to instantiate YT.Player:', initErr);
     }
-  }, [currentTrack?.videoId, isApiReady, volume, playbackSpeed, showToast]);
+  }, [currentTrack?.videoId, isApiReady]);
 
   // Sync volume with YT player
   useEffect(() => {
@@ -812,7 +832,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
             <>
               {/* Target IFrame Div for YouTube Player API */}
               <div
-                id="musichub-yt-iframe-slot"
+                ref={iframeContainerRef}
                 className={`w-full h-full ${playerError ? 'hidden' : 'block'}`}
               />
 
