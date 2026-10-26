@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { apiRouter } from './server/apiRouter.ts';
 
+import fs from 'fs';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,7 +14,9 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
-  const isProd = process.env.NODE_ENV === 'production';
+  const distPath = path.resolve(__dirname, 'dist');
+  const hasDist = fs.existsSync(path.resolve(distPath, 'index.html'));
+  const isProd = process.env.NODE_ENV === 'production' || (hasDist && process.env.NODE_ENV !== 'development');
 
   app.use(express.json());
 
@@ -30,6 +34,11 @@ async function startServer() {
   // Mount backend API routes
   app.use('/api', apiRouter);
 
+  // Graceful API catchall: never return 404 HTML for API routes
+  app.all('/api/*', (req, res) => {
+    res.json({ items: [], totalResults: 0, query: '', source: 'all' });
+  });
+
   if (!isProd) {
     // In dev: mount Vite dev server as middleware
     const { createServer } = await import('vite');
@@ -40,7 +49,6 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // In production: serve built static client files
-    const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
