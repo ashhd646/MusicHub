@@ -32,6 +32,7 @@ import {
   setStoredSmartShuffle,
   generateSmartShuffleQueue,
 } from '../services/smartQueue.ts';
+import { backgroundAudioKeepAlive } from '../services/backgroundAudioKeepAlive.ts';
 
 declare global {
   interface Window {
@@ -90,6 +91,24 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const loopModeRef = useRef<LoopMode>(loopMode);
   const isSmartShuffleRef = useRef<boolean>(isSmartShuffle);
   const handleNextTrackRef = useRef<() => void>(() => {});
+  // Tracks whether the user intends the song to be playing (true during normal playback and across tab switches)
+  const userIntendedPlayingRef = useRef<boolean>(true);
+
+  // Auto-resumes playback if Chrome or browser throttles/pauses in a background tab
+  const checkAndForceResume = useCallback(() => {
+    if (!userIntendedPlayingRef.current) return;
+    if (currentTrack?.playbackType === 'youtube-iframe' && playerRef.current) {
+      try {
+        const state = typeof playerRef.current.getPlayerState === 'function' ? playerRef.current.getPlayerState() : null;
+        // YT states: 2 (paused), -1 (unstarted), 5 (video cued)
+        if (state === 2 || state === -1 || state === 5) {
+          playerRef.current.playVideo?.();
+        }
+      } catch {}
+    } else if (audioRef.current && audioRef.current.paused && userIntendedPlayingRef.current) {
+      audioRef.current.play().catch(() => {});
+    }
+  }, [currentTrack]);
 
   useEffect(() => {
     loopModeRef.current = loopMode;
@@ -161,6 +180,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
   // Next Track Logic (Handles Smart Shuffle, Queue Loop, and Standard Advance)
   const handleNextTrack = useCallback(() => {
+    userIntendedPlayingRef.current = true;
     if (!playlist || playlist.length === 0) {
       onNext?.();
       return;
@@ -211,6 +231,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
   // Previous Track Logic (Rewinds to 0 if >3s, or goes to previous history / queue track)
   const handlePreviousTrack = useCallback(() => {
+    userIntendedPlayingRef.current = true;
     // If playing for more than 3 seconds, rewind current song to beginning
     if (currentTime > 3) {
       if (currentTrack?.playbackType === 'youtube-iframe') {
@@ -314,6 +335,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     // If player already exists, load the new video ID with full unmuted audio
     if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
       try {
+        userIntendedPlayingRef.current = true;
         playerRef.current.unMute?.();
         playerRef.current.setVolume?.(volume || 100);
         if (playbackSpeed !== 1) {
@@ -326,6 +348,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         playerRef.current.playVideo?.();
         setIsPlaying(true);
         setIsMuted(false);
+        backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
         return;
       } catch (e) {
         // Fallback to recreating
@@ -352,12 +375,14 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         events: {
           onReady: (event: any) => {
             try {
+              userIntendedPlayingRef.current = true;
               event.target.unMute();
               event.target.setVolume(volume || 100);
               if (playbackSpeed !== 1) {
                 event.target.setPlaybackRate(playbackSpeed);
               }
               event.target.playVideo();
+              backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
             } catch (err) {
               console.warn('Playback initialization notice:', err);
             }
@@ -368,7 +393,9 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
             // YT.PlayerState: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
             if (event.data === 1) {
               setIsPlaying(true);
+              userIntendedPlayingRef.current = true;
               setPlayerError(null);
+              backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
               try {
                 if (event.target.isMuted()) {
                   setIsMuted(true);
@@ -377,7 +404,34 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 }
               } catch {}
             } else if (event.data === 2) {
-              setIsPlaying(false);
+              // Pause event: Check if pause was forced by Chrome background tab throttling / tab switch
+              if (userIntendedPlayingRef.current && (document.hidden || !document.hasFocus())) {
+                try {
+                  event.target.playVideo();
+                } catch {}
+                // Re-attempt quickly in case browser fires another throttle event
+                setTimeout(() => {
+                  if (userIntendedPlayingRef.current) {
+                    try {
+                      event.target.playVideo();
+                    } catch {}
+                  }
+                }, 100);
+                setTimeout(() => {
+                  if (userIntendedPlayingRef.current) {
+                    try {
+                      event.target.playVideo();
+                    } catch {}
+                  }
+                }, 350);
+                return;
+              }
+
+              // Only update to false if user actually paused
+              if (!userIntendedPlayingRef.current) {
+                setIsPlaying(false);
+                backgroundAudioKeepAlive.stopKeepAlive();
+              }
             } else if (event.data === 0) {
               // Track has ended!
               if (loopModeRef.current === 'single') {
@@ -491,35 +545,43 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   // Background audio keep-alive and visibilitychange prevention
   useEffect(() => {
     if (isPlaying && backgroundPlay) {
+      backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
       if (keepAliveAudioRef.current) {
         keepAliveAudioRef.current.play().catch(() => {});
-      }
-    } else {
-      if (keepAliveAudioRef.current) {
-        keepAliveAudioRef.current.pause();
       }
     }
 
     const handleVisibilityChange = () => {
       // When tab goes to background or user switches tab
-      if (document.hidden && backgroundPlay && isPlaying) {
-        setTimeout(() => {
-          if (playerRef.current && typeof playerRef.current.getPlayerState === 'function') {
-            const state = playerRef.current.getPlayerState();
-            // If browser automatically paused it (state === 2), re-trigger play
-            if (state === 2) {
-              playerRef.current.playVideo?.();
-            }
-          }
-        }, 150);
+      if (document.hidden && backgroundPlay && userIntendedPlayingRef.current) {
+        backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+        checkAndForceResume();
+        // Schedule follow-ups because Chrome throttles background iframes immediately
+        setTimeout(checkAndForceResume, 100);
+        setTimeout(checkAndForceResume, 350);
+        setTimeout(checkAndForceResume, 850);
+      } else if (!document.hidden && userIntendedPlayingRef.current) {
+        checkAndForceResume();
+      }
+    };
+
+    const handleBlur = () => {
+      if (backgroundPlay && userIntendedPlayingRef.current) {
+        checkAndForceResume();
+        setTimeout(checkAndForceResume, 150);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('pagehide', handleBlur);
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('pagehide', handleBlur);
     };
-  }, [isPlaying, backgroundPlay]);
+  }, [isPlaying, backgroundPlay, checkAndForceResume]);
 
   // Periodic time update ticker
   useEffect(() => {
@@ -546,10 +608,14 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     if (currentTrack.playbackType === 'audio-stream') {
       if (audioRef.current) {
         if (isPlaying) {
+          userIntendedPlayingRef.current = false;
+          backgroundAudioKeepAlive.stopKeepAlive();
           audioRef.current.pause();
           setIsPlaying(false);
         } else {
-          audioRef.current.play();
+          userIntendedPlayingRef.current = true;
+          backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
+          audioRef.current.play().catch(() => {});
           setIsPlaying(true);
         }
       }
@@ -559,9 +625,15 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     if (playerRef.current) {
       try {
         if (isPlaying) {
+          userIntendedPlayingRef.current = false;
+          backgroundAudioKeepAlive.stopKeepAlive();
           playerRef.current.pauseVideo();
+          setIsPlaying(false);
         } else {
+          userIntendedPlayingRef.current = true;
+          backgroundAudioKeepAlive.startKeepAlive(checkAndForceResume);
           playerRef.current.playVideo();
+          setIsPlaying(true);
         }
       } catch {}
     }
@@ -706,6 +778,8 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
             <button
               onClick={() => {
+                userIntendedPlayingRef.current = false;
+                backgroundAudioKeepAlive.stopKeepAlive();
                 if (playerRef.current) {
                   try {
                     playerRef.current.stopVideo?.();
@@ -724,11 +798,11 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
           </div>
         </div>
 
-        {/* Video Viewport: Kept in DOM to maintain audio session when minimized */}
+        {/* Video Viewport: Kept in DOM with active rendering to maintain audio session when minimized */}
         <div
           className={`relative bg-black transition-all duration-200 ${
             isMinimized
-              ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
+              ? 'h-[1px] w-[1px] opacity-10 pointer-events-none absolute -bottom-96'
               : isTheater
               ? 'flex-1 min-h-[300px]'
               : 'aspect-video'
