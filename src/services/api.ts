@@ -1,36 +1,16 @@
 import { SearchResponse, UnifiedTrack, ApiStatus, ApiErrorResponse } from '../types/index.ts';
 
-const USER_API_KEY_STORAGE = 'musichub_yt_user_api_key';
-
-export function getCustomApiKey(): string {
-  try {
-    return localStorage.getItem(USER_API_KEY_STORAGE) || '';
-  } catch {
-    return '';
+// Automatically remove any legacy user API keys from browser storage
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('musichub_yt_user_api_key');
   }
-}
-
-export function setCustomApiKey(key: string): void {
-  try {
-    if (key.trim()) {
-      localStorage.setItem(USER_API_KEY_STORAGE, key.trim());
-    } else {
-      localStorage.removeItem(USER_API_KEY_STORAGE);
-    }
-  } catch {
-    // Ignore storage issues
-  }
-}
+} catch {}
 
 function getRequestHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     Accept: 'application/json',
   };
-  const customKey = getCustomApiKey();
-  if (customKey) {
-    headers['x-youtube-key'] = customKey;
-  }
-  return headers;
 }
 
 export async function checkApiHealth(): Promise<ApiStatus> {

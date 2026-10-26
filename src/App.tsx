@@ -41,7 +41,6 @@ import { setStoredSmartShuffle, generateSmartShuffleQueue } from './services/sma
 import {
   searchUniversalMusic,
   checkApiHealth,
-  getCustomApiKey,
 } from './services/api.ts';
 import { UnifiedTrack, ApiStatus } from './types/index.ts';
 
@@ -236,7 +235,6 @@ export default function App() {
     setError(null);
   };
 
-  const hasCustomKey = Boolean(getCustomApiKey());
   const hasServerKey = Boolean(apiStatus?.hasServerKey);
 
   return (
@@ -305,7 +303,7 @@ export default function App() {
               </h1>
           <p className="hidden sm:block text-xs sm:text-sm text-slate-400 max-w-2xl mx-auto">
             Search songs, artists, music videos, Bollywood, Punjabi, regional tracks, and international releases
-            powered by the official YouTube Data API v3.
+            with full duration playback, Smart Shuffle, and background listening.
           </p>
 
           {/* YouTube Suggest API Autocomplete Search Input */}
@@ -356,11 +354,7 @@ export default function App() {
               </div>
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-red-200">
-                  {error.code === 'QUOTA_EXCEEDED'
-                    ? 'YouTube Data API Quota Reached'
-                    : error.code === 'MISSING_KEY'
-                    ? 'YouTube API Key Required'
-                    : 'Search Request Failed'}
+                  Search Notice
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
                   {typeof error.message === 'string' ? error.message : JSON.stringify(error.message)}
@@ -377,17 +371,11 @@ export default function App() {
 
             <div className="flex items-center gap-2 self-end md:self-center shrink-0">
               <button
-                onClick={() => setIsKeyModalOpen(true)}
-                className="px-3.5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl shadow-md transition-colors"
-              >
-                Add Your API Key
-              </button>
-              <button
                 onClick={() => performSearch(debouncedQuery, activeProvider, regionCode, false)}
-                className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
-                title="Retry search"
+                className="px-3.5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry Search</span>
               </button>
             </div>
           </div>

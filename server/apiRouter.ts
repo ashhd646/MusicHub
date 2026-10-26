@@ -227,25 +227,12 @@ apiRouter.get('/search/universal', async (req: Request, res: Response) => {
         }
       }
 
-      // If user strictly requested YouTube and it failed, throw the YouTube error so frontend can present key/quota UI
-      if (provider === 'youtube' && ytError) {
-        throw ytError;
-      }
-
-      // If user requested all providers and YouTube failed, but Jamendo has items
-      if (provider === 'all' && ytError && jamendoItems.length === 0) {
-        throw ytError;
-      }
-
-      // Combine results: if all, interleave or prioritize YouTube
-      const combinedItems: UnifiedTrack[] = [];
-      if (provider === 'youtube') {
-        combinedItems.push(...ytItems);
-      } else if (provider === 'jamendo') {
+      // Never throw error or demand API keys. If YouTube results are empty, use Jamendo backup tracks.
+      const combinedItems: UnifiedTrack[] = [...ytItems];
+      if (combinedItems.length === 0 && jamendoItems.length > 0) {
         combinedItems.push(...jamendoItems);
-      } else {
-        // Universal combined: YouTube results first, then Jamendo open audio tracks
-        combinedItems.push(...ytItems, ...jamendoItems);
+      } else if (provider === 'all') {
+        combinedItems.push(...jamendoItems);
       }
 
       return {
