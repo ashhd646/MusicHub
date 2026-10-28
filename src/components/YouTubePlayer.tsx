@@ -702,12 +702,12 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     <>
       <div
         ref={containerRef}
-        className={`fixed z-50 transition-all duration-300 ease-out bg-[#0F172A] border border-slate-700/80 shadow-2xl rounded-2xl overflow-hidden backdrop-blur-xl ${
+        className={`fixed z-50 transition-all duration-300 ease-out bg-[#0F172A] border border-slate-700/80 shadow-2xl backdrop-blur-xl ${
           isTheater
-            ? 'inset-2 sm:inset-4 md:inset-10 max-w-5xl mx-auto flex flex-col'
+            ? 'inset-2 sm:inset-4 md:inset-10 max-w-5xl mx-auto flex flex-col rounded-2xl overflow-hidden'
             : isMinimized
-            ? 'bottom-[54px] md:bottom-4 left-2 right-2 sm:left-auto sm:right-4 w-auto sm:w-[460px]'
-            : 'bottom-[54px] md:bottom-4 left-2 right-2 sm:left-auto sm:right-4 md:right-8 w-auto sm:w-[500px] lg:w-[560px]'
+            ? 'bottom-[52px] md:bottom-0 left-0 right-0 w-full rounded-none border-x-0 border-b-0 border-t border-slate-800 bg-[#0B0F19]/98 shadow-2xl px-2.5 sm:px-4 py-2'
+            : 'bottom-[54px] md:bottom-4 left-2 right-2 sm:left-auto sm:right-4 md:right-8 w-auto sm:w-[500px] lg:w-[560px] rounded-2xl overflow-hidden'
         }`}
         role="region"
         aria-label="Official MusicHub Player"
@@ -719,299 +719,288 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
           </div>
         )}
 
-        {/* Player Header Bar */}
-        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-900/90 border-b border-slate-800">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-300 whitespace-nowrap">
-              Now Playing
-            </span>
-            <span className="text-[11px] sm:text-xs text-slate-500 truncate max-w-[100px] sm:max-w-[170px]">
-              · {currentTrack.channelTitle}
-            </span>
+        {/* Top Progress Scrubber for Minimized Bottom Dock Bar */}
+        {isMinimized && duration > 0 && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800 group cursor-pointer z-30">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onChange={handleSeek}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer accent-red-500 z-10"
+              aria-label="Seek progress"
+            />
+            <div
+              className="h-full bg-red-600 transition-all duration-150"
+              style={{ width: `${Math.min(100, Math.max(0, (currentTime / duration) * 100))}%` }}
+            />
           </div>
+        )}
 
-          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-            {/* Background Playback Toggle */}
-            <button
-              onClick={toggleBackgroundPlay}
-              className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors cursor-pointer ${
-                backgroundPlay
-                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-              title={
-                backgroundPlay
-                  ? 'Background Play Active: Music keeps playing across tabs & minimizes'
-                  : 'Enable Background Play'
-              }
-            >
-              <Headphones className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline text-[11px] font-medium">
-                {backgroundPlay ? 'Background ON' : 'Background OFF'}
+        {/* Player Header Bar (Hidden in compact bottom dock) */}
+        {!isMinimized && (
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-900/90 border-b border-slate-800">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-300 whitespace-nowrap">
+                Now Playing
               </span>
-            </button>
+              <span className="text-[11px] sm:text-xs text-slate-500 truncate max-w-[100px] sm:max-w-[170px]">
+                · {currentTrack.channelTitle}
+              </span>
+            </div>
 
-            {/* Document Picture-in-Picture / Floating Window Button */}
-            <button
-              onClick={togglePictureInPicture}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Floating Mini Player (PiP): Screen ke upar float hoga, Chrome minimize par chalta rahega"
-            >
-              <PictureInPicture2 className="w-4 h-4" />
-            </button>
-
-            {onDownload && (
+            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+              {/* Background Playback Toggle */}
               <button
-                onClick={() => onDownload(currentTrack)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Download / Save to Device ROM"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
-
-            <a
-              href={currentTrack.externalUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-              title="Open on YouTube / Official Source"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </a>
-
-            {!isTheater && (
-              <button
-                onClick={() => setIsMinimized(!isMinimized)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                title={isMinimized ? 'Expand Video' : 'Minimize to Audio Bar'}
-              >
-                {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            )}
-
-            <button
-              onClick={() => {
-                setIsTheater(!isTheater);
-                setIsMinimized(false);
-              }}
-              className="hidden sm:inline-flex p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              title={isTheater ? 'Exit Theater Mode' : 'Theater Mode'}
-            >
-              {isTheater ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-
-            <button
-              onClick={() => {
-                userIntendedPlayingRef.current = false;
-                backgroundAudioKeepAlive.stopKeepAlive();
-                if (playerRef.current) {
-                  try {
-                    playerRef.current.stopVideo?.();
-                  } catch {}
+                onClick={toggleBackgroundPlay}
+                className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors cursor-pointer ${
+                  backgroundPlay
+                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+                title={
+                  backgroundPlay
+                    ? 'Background Play Active: Music keeps playing across tabs & minimizes'
+                    : 'Enable Background Play'
                 }
-                onClose();
-              }}
-              className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Close Player"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Video / Audio Viewport */}
-        <div
-          className={`relative bg-black transition-all duration-200 overflow-hidden ${
-            isMinimized
-              ? 'h-28 sm:h-32'
-              : isTheater
-              ? 'flex-1 min-h-[300px]'
-              : 'aspect-video'
-          }`}
-        >
-          {currentTrack.playbackType === 'youtube-iframe' ? (
-            <>
-              {/* Target IFrame Div for YouTube Player API - plays complete full-length video and audio */}
-              <div
-                ref={iframeContainerRef}
-                className={`w-full h-full ${playerError ? 'hidden' : 'block'}`}
-              />
-
-              {/* Player Error State */}
-              {playerError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/95 text-slate-200">
-                  <AlertCircle className="w-10 h-10 text-amber-400 mb-3" />
-                  <h4 className="text-sm font-bold text-white mb-1">Official Playback Restricted</h4>
-                  <p className="text-xs text-slate-400 max-w-md mb-4">
-                    {typeof playerError.message === 'string' ? playerError.message : JSON.stringify(playerError.message)}
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => handleNextTrackRef.current()}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg cursor-pointer"
-                    >
-                      Play Next Song
-                    </button>
-                    <a
-                      href={currentTrack.externalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      YouTube
-                    </a>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            /* Royalty-Free Full Audio Stream (e.g. Jamendo) */
-            <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-center relative overflow-hidden">
-              <div className="relative mb-3 group">
-                <img
-                  src={currentTrack.thumbnail}
-                  alt={currentTrack.title}
-                  className={`w-24 h-24 sm:w-28 sm:h-28 rounded-2xl shadow-2xl object-cover border-2 border-indigo-500/30 transition-transform duration-500 ${isPlaying ? 'scale-105' : 'scale-100 opacity-80'}`}
-                />
-                {isPlaying && (
-                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-emerald-500/90 text-white font-semibold text-[10px] rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                    <span>Playing Audio</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-mono text-[10px] uppercase font-bold tracking-wider border border-indigo-500/30">
-                  Full Audio Stream
+              >
+                <Headphones className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px] font-medium">
+                  {backgroundPlay ? 'Background ON' : 'Background OFF'}
                 </span>
-              </div>
+              </button>
 
-              <h4 className="text-sm font-bold text-white truncate max-w-sm px-4">{currentTrack.title}</h4>
-              <p className="text-xs text-slate-400 truncate max-w-xs mb-3">{currentTrack.channelTitle}</p>
+              {/* Document Picture-in-Picture / Floating Window Button */}
+              <button
+                onClick={togglePictureInPicture}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Floating Mini Player (PiP): Keeps playing when Chrome is minimized to taskbar"
+              >
+                <PictureInPicture2 className="w-4 h-4" />
+              </button>
 
-              {/* Sound Wave Animation Bars */}
-              <div className="flex items-center gap-1 h-4">
-                {[40, 70, 95, 60, 85, 45, 90, 65, 30, 80, 55, 90].map((h, i) => (
+              {onDownload && (
+                <button
+                  onClick={() => onDownload(currentTrack)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Download / Save to Device ROM"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              )}
+
+              <a
+                href={currentTrack.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                title="Open on YouTube / Official Source"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+
+              {!isTheater && (
+                <button
+                  onClick={() => setIsMinimized(true)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Minimize to Compact Bottom Bar"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setIsTheater(!isTheater);
+                  setIsMinimized(false);
+                }}
+                className="hidden sm:inline-flex p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title={isTheater ? 'Exit Theater Mode' : 'Theater Mode'}
+              >
+                {isTheater ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </button>
+
+              <button
+                onClick={() => {
+                  userIntendedPlayingRef.current = false;
+                  backgroundAudioKeepAlive.stopKeepAlive();
+                  if (playerRef.current) {
+                    try {
+                      playerRef.current.stopVideo?.();
+                    } catch {}
+                  }
+                  onClose();
+                }}
+                className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close Player"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <div className={isMinimized ? 'flex items-center justify-between gap-2 sm:gap-4 w-full' : 'flex flex-col w-full'}>
+          {/* Left Block: Video Viewport + Info */}
+          <div className={`flex items-center min-w-0 ${isMinimized ? 'gap-2.5 sm:gap-3 shrink max-w-[42%] sm:max-w-xs md:max-w-sm' : 'flex-col w-full'}`}>
+            {/* Stable Single-Instance Video Viewport */}
+            <div
+              onClick={isMinimized ? () => setIsMinimized(false) : undefined}
+              className={`relative bg-black transition-all duration-200 overflow-hidden ${
+                isTheater
+                  ? 'flex-1 min-h-[300px] w-full'
+                  : isMinimized
+                  ? 'w-20 h-12 sm:w-28 sm:h-16 shrink-0 rounded-lg border border-slate-700/80 cursor-pointer shadow-md group'
+                  : 'aspect-video w-full'
+              }`}
+              title={isMinimized ? 'Click to Expand Video Player' : undefined}
+            >
+              {currentTrack.playbackType === 'youtube-iframe' ? (
+                <>
                   <div
-                    key={i}
-                    className="w-1 bg-gradient-to-t from-red-500 to-amber-300 rounded-full transition-all duration-300"
-                    style={{
-                      height: isPlaying ? `${h}%` : '20%',
-                      opacity: isPlaying ? 0.9 : 0.3,
+                    ref={iframeContainerRef}
+                    className={`w-full h-full ${playerError ? 'hidden' : 'block'}`}
+                  />
+                  {isMinimized && (
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
+                      <ChevronUp className="w-5 h-5 text-white drop-shadow" />
+                    </div>
+                  )}
+                  {playerError && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-slate-950/95 text-slate-200">
+                      <AlertCircle className="w-4 h-4 text-amber-400 mb-1" />
+                      <p className="text-[10px] text-slate-400 truncate max-w-full">Restricted</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Royalty-Free Full Audio Stream (e.g. Jamendo) */
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-950 to-indigo-950 text-center relative overflow-hidden">
+                  <img
+                    src={currentTrack.thumbnail}
+                    alt={currentTrack.title}
+                    className={`w-full h-full object-cover ${isPlaying ? 'scale-105' : 'scale-100 opacity-80'}`}
+                  />
+                  <audio
+                    ref={audioRef}
+                    src={currentTrack.audioStreamUrl || undefined}
+                    autoPlay
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => {
+                      if (loopModeRef.current === 'single') {
+                        if (audioRef.current) {
+                          audioRef.current.currentTime = 0;
+                          audioRef.current.play().catch(() => {});
+                          setIsPlaying(true);
+                          showToast('🔂 Repeating song in loop');
+                        }
+                      } else {
+                        handleNextTrackRef.current();
+                      }
                     }}
                   />
-                ))}
-              </div>
-
-              <audio
-                ref={audioRef}
-                src={currentTrack.audioStreamUrl || undefined}
-                autoPlay
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => {
-                  if (loopModeRef.current === 'single') {
-                    if (audioRef.current) {
-                      audioRef.current.currentTime = 0;
-                      audioRef.current.play().catch(() => {});
-                      setIsPlaying(true);
-                      showToast('🔂 Repeating song in loop');
-                    }
-                  } else {
-                    handleNextTrackRef.current();
-                  }
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Track Info & Persistent Audio Controls Bar */}
-        <div className="p-3 sm:p-3.5 bg-slate-900/95 border-t border-slate-800">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              {/* Mini album thumbnail when minimized */}
-              {isMinimized && (
-                <img
-                  src={currentTrack.thumbnail}
-                  alt={currentTrack.title}
-                  className="w-10 h-10 rounded-lg object-cover border border-slate-800 shrink-0"
-                />
+                </div>
               )}
+            </div>
+
+            {/* In Minimized mode: Title and channel right next to video */}
+            {isMinimized && (
               <div className="min-w-0">
-                <h3 className="text-xs sm:text-sm font-semibold text-white truncate" title={currentTrack.title}>
+                <h4
+                  className="text-xs sm:text-sm font-semibold text-white truncate max-w-[120px] sm:max-w-[170px] md:max-w-xs cursor-pointer hover:text-red-400 transition-colors"
+                  title={currentTrack.title}
+                  onClick={() => setIsMinimized(false)}
+                >
                   {currentTrack.title}
-                </h3>
-                <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-slate-400 mt-0.5">
-                  <span className="truncate max-w-[120px] sm:max-w-[160px]">{currentTrack.channelTitle}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="font-mono tabular-nums text-slate-400">
-                    {currentTrack.duration || (duration > 0 ? formatSecs(duration) : 'Full Song')}
+                </h4>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate">
+                  <span className="truncate max-w-[80px] sm:max-w-[120px]">{currentTrack.channelTitle}</span>
+                  <span aria-hidden="true" className="hidden sm:inline">·</span>
+                  <span className="hidden sm:inline font-mono tabular-nums text-slate-400">
+                    {formatSecs(currentTime)} / {formatSecs(duration)}
                   </span>
-
-                  {/* Active Loop Badge */}
-                  {loopMode === 'single' && (
-                    <span className="text-[10px] text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-1 shadow-sm">
-                      <Repeat1 className="w-3 h-3 text-rose-400" />
-                      <span>Song in Loop</span>
-                    </span>
-                  )}
-                  {loopMode === 'all' && (
-                    <span className="text-[10px] text-blue-300 bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-1">
-                      <Repeat className="w-3 h-3 text-blue-400" />
-                      <span>Loop All</span>
-                    </span>
-                  )}
-
-                  {/* Active Smart Shuffle Badge */}
-                  {isSmartShuffle && (
-                    <span className="text-[10px] text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-1 shadow-sm">
-                      <Sparkles className="w-3 h-3 text-amber-300" />
-                      <span>Smart Shuffle</span>
-                    </span>
-                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Direct YouTube link button */}
-            <a
-              href={currentTrack.externalUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline-block shrink-0 px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md border border-slate-700 transition-colors"
-            >
-              YouTube
-            </a>
+            )}
           </div>
 
-          {/* Progress scrub bar */}
-          {duration > 0 && (
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-mono tabular-nums text-slate-400 w-9 text-right">
-                {formatSecs(currentTime)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                value={currentTime}
-                onChange={handleSeek}
-                className="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
-                aria-label="Seek progress"
-              />
-              <span className="text-[11px] font-mono tabular-nums text-slate-400 w-9">
-                {formatSecs(duration)}
-              </span>
+          {/* In Expanded mode: Title and persistent info block */}
+          {!isMinimized && (
+            <div className="p-3 sm:p-3.5 bg-slate-900/95 border-t border-slate-800">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <h3 className="text-xs sm:text-sm font-semibold text-white truncate" title={currentTrack.title}>
+                      {currentTrack.title}
+                    </h3>
+                    <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-slate-400 mt-0.5">
+                      <span className="truncate max-w-[120px] sm:max-w-[160px]">{currentTrack.channelTitle}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="font-mono tabular-nums text-slate-400">
+                        {currentTrack.duration || (duration > 0 ? formatSecs(duration) : 'Full Song')}
+                      </span>
+
+                      {loopMode === 'single' && (
+                        <span className="text-[10px] text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-1 shadow-sm">
+                          <Repeat1 className="w-3 h-3 text-rose-400" />
+                          <span>Song in Loop</span>
+                        </span>
+                      )}
+                      {loopMode === 'all' && (
+                        <span className="text-[10px] text-blue-300 bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-1">
+                          <Repeat className="w-3 h-3 text-blue-400" />
+                          <span>Loop All</span>
+                        </span>
+                      )}
+                      {isSmartShuffle && (
+                        <span className="text-[10px] text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex items-center gap-1 shadow-sm">
+                          <Sparkles className="w-3 h-3 text-amber-300" />
+                          <span>Smart Shuffle</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href={currentTrack.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden sm:inline-block shrink-0 px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md border border-slate-700 transition-colors"
+                >
+                  YouTube
+                </a>
+              </div>
+
+              {/* Progress scrub bar */}
+              {duration > 0 && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-mono tabular-nums text-slate-400 w-9 text-right">
+                    {formatSecs(currentTime)}
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={duration || 100}
+                    value={currentTime}
+                    onChange={handleSeek}
+                    className="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
+                    aria-label="Seek progress"
+                  />
+                  <span className="text-[11px] font-mono tabular-nums text-slate-400 w-9">
+                    {formatSecs(duration)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Bottom controls row */}
-          <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+          {/* Controls Bar */}
+          <div className={isMinimized ? 'flex items-center justify-end gap-1.5 sm:gap-3 grow' : 'px-3 sm:px-3.5 pb-3 bg-slate-900/95 flex items-center justify-between pt-1 gap-2 flex-wrap'}>
             {/* Playback & Queue Controls */}
             <div className="flex items-center gap-1 sm:gap-1.5">
               {/* Smart Shuffle Button */}
@@ -1021,7 +1010,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                   isSmartShuffle
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/25'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent'
-                }`}
+                } ${isMinimized ? 'hidden sm:flex' : ''}`}
                 title={
                   isSmartShuffle
                     ? 'Smart Shuffle ON: Non-repeating intelligent mix (Click to turn off)'
@@ -1033,9 +1022,6 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 <Sparkles
                   className={`w-2.5 h-2.5 ${isSmartShuffle ? 'text-amber-300 animate-pulse' : 'text-slate-500'}`}
                 />
-                <span className="hidden md:inline text-[10px] font-semibold">
-                  {isSmartShuffle ? 'Shuffle ON' : 'Shuffle'}
-                </span>
               </button>
 
               {/* Previous Track Button */}
@@ -1052,7 +1038,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               {/* Play / Pause Main Button */}
               <button
                 onClick={togglePlay}
-                className="w-8 h-8 sm:w-9 sm:h-9 bg-red-600 hover:bg-red-500 active:scale-95 text-white rounded-full transition-transform shadow-md flex items-center justify-center cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 bg-red-600 hover:bg-red-500 active:scale-95 text-white rounded-full transition-transform shadow-md flex items-center justify-center cursor-pointer shrink-0"
                 aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? <Pause className="w-4 h-4 fill-white" /> : <Play className="w-4 h-4 fill-white ml-0.5" />}
@@ -1078,7 +1064,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                     : loopMode === 'all'
                     ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent'
-                }`}
+                } ${isMinimized ? 'hidden sm:flex' : ''}`}
                 title={
                   loopMode === 'single'
                     ? 'Song in Loop Active: Repeating this song endlessly (Click to change)'
@@ -1093,14 +1079,11 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 ) : (
                   <Repeat className={`w-4 h-4 ${loopMode === 'all' ? 'text-blue-300' : ''}`} />
                 )}
-                <span className="hidden sm:inline text-[10px] font-bold">
-                  {loopMode === 'single' ? 'Loop Song' : loopMode === 'all' ? 'Loop All' : 'Loop'}
-                </span>
               </button>
             </div>
 
-            {/* Volume & Audio Speed Controls */}
-            <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+            {/* Volume & Audio Speed Controls & Dock Actions */}
+            <div className="flex items-center gap-1 sm:gap-2">
               <button
                 onClick={() => {
                   const nextMuted = !isMuted;
@@ -1119,7 +1102,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 }}
                 className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                   isMuted ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:text-white'
-                }`}
+                } ${isMinimized ? 'hidden sm:block' : ''}`}
                 title={isMuted ? 'Click to Unmute Speaker Output' : 'Mute Speaker'}
                 aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
@@ -1135,12 +1118,12 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                   setVolume(Number(e.target.value));
                   if (isMuted) setIsMuted(false);
                 }}
-                className="hidden sm:block w-12 sm:w-16 md:w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
+                className={`hidden md:block w-14 lg:w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500 ${isMinimized ? 'hidden lg:block' : ''}`}
                 aria-label="Volume slider"
               />
 
               {/* Playback Speed Control Selector (0.5x to 2.0x) */}
-              <div className="flex items-center gap-1 bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg px-2 py-1 text-xs transition-colors shrink-0">
+              <div className={`items-center gap-1 bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg px-2 py-1 text-xs transition-colors shrink-0 ${isMinimized ? 'hidden md:flex' : 'flex'}`}>
                 <Gauge className="w-3.5 h-3.5 text-slate-400" />
                 <select
                   value={playbackSpeed}
@@ -1158,6 +1141,47 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                   <option value={2} className="bg-slate-900 text-white">2.0x</option>
                 </select>
               </div>
+
+              {/* In Minimized: PiP Button */}
+              {isMinimized && (
+                <button
+                  onClick={togglePictureInPicture}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Floating Mini Player (PiP): Keeps playing when Chrome is minimized to taskbar"
+                >
+                  <PictureInPicture2 className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* In Minimized: Expand to Floating Card Button */}
+              {isMinimized && (
+                <button
+                  onClick={() => setIsMinimized(false)}
+                  className="p-1.5 text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700/80 transition-colors cursor-pointer flex items-center gap-1"
+                  title="Expand to Full Video Player"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                  <span className="hidden sm:inline text-[11px] font-semibold">Video</span>
+                </button>
+              )}
+
+              {/* In Minimized: Close Player Button */}
+              {isMinimized && (
+                <button
+                  onClick={() => {
+                    userIntendedPlayingRef.current = false;
+                    backgroundAudioKeepAlive.stopKeepAlive();
+                    if (playerRef.current) {
+                      try { playerRef.current.stopVideo?.(); } catch {}
+                    }
+                    onClose();
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Close Player"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
