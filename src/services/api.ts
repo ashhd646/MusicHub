@@ -85,35 +85,79 @@ async function searchPipedDirect(query: string, signal?: AbortSignal): Promise<U
   return [];
 }
 
-// Direct Client-Side Fallback 2: Apple iTunes Music API (CORS-enabled worldwide, instant high-quality music)
-async function searchItunesDirect(query: string, signal?: AbortSignal): Promise<UnifiedTrack[]> {
+// Direct Client-Side Fallback 2: Public Invidious API for full-length YouTube video IDs
+async function searchInvidiousDirect(query: string, signal?: AbortSignal): Promise<UnifiedTrack[]> {
+  const instances = [
+    'https://inv.nadeko.net',
+    'https://invidious.nerdvpn.de',
+    'https://vid.puffyan.us',
+  ];
+
+  for (const base of instances) {
+    try {
+      const url = `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+      const res = await fetch(url, { signal: signal || AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const items = data
+            .filter((i: any) => i.videoId)
+            .map((i: any) => {
+              const durationSecs = Number(i.lengthSeconds) || 0;
+              const durationStr =
+                durationSecs > 0
+                  ? `${Math.floor(durationSecs / 60)}:${String(durationSecs % 60).padStart(2, '0')}`
+                  : 'Full Track';
+
+              return {
+                videoId: i.videoId,
+                title: i.title || 'Untitled Track',
+                description: i.description || '',
+                thumbnail: `https://i.ytimg.com/vi/${i.videoId}/hqdefault.jpg`,
+                channelTitle: i.author || 'YouTube Music',
+                publishedAt: new Date().toISOString(),
+                source: 'youtube' as const,
+                playbackType: 'youtube-iframe' as const,
+                externalUrl: `https://www.youtube.com/watch?v=${i.videoId}`,
+                duration: durationStr,
+                isEmbeddable: true,
+              };
+            });
+
+          if (items.length > 0) return items;
+        }
+      }
+    } catch {}
+  }
+  return [];
+}
+
+// Direct Client-Side Fallback 3: Jamendo full-length tracks
+async function searchJamendoDirect(query: string, signal?: AbortSignal): Promise<UnifiedTrack[]> {
   try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=25`;
+    const url = `https://api.jamendo.com/v3.0/tracks/?client_id=56d30c95&format=jsonpretty&limit=10&search=${encodeURIComponent(query)}&include=musicinfo`;
     const res = await fetch(url, { signal: signal || AbortSignal.timeout(6000) });
     if (res.ok) {
       const data = await res.json();
-      const results = data.results || [];
-      return results.map((r: any) => {
-        const durationSecs = Math.floor((r.trackTimeMillis || 0) / 1000);
+      return (data.results || []).map((t: any) => {
+        const durationSecs = Number(t.duration) || 0;
         const durationStr =
           durationSecs > 0
             ? `${Math.floor(durationSecs / 60)}:${String(durationSecs % 60).padStart(2, '0')}`
             : 'Full Track';
 
         return {
-          videoId: `itunes_${r.trackId}`,
-          title: r.trackName || 'Untitled Track',
-          description: r.collectionName || '',
-          thumbnail: (r.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
-          channelTitle: r.artistName || 'Unknown Artist',
-          publishedAt: r.releaseDate || new Date().toISOString(),
-          source: 'youtube' as const,
-          playbackType: (r.previewUrl ? 'audio-stream' : 'youtube-iframe') as any,
-          externalUrl:
-            r.trackViewUrl ||
-            `https://www.youtube.com/results?search_query=${encodeURIComponent(r.trackName + ' ' + r.artistName)}`,
+          videoId: `jamendo_${t.id}`,
+          title: t.name || 'Untitled Track',
+          description: t.album_name || '',
+          thumbnail: t.image || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600',
+          channelTitle: t.artist_name || 'Jamendo Music',
+          publishedAt: t.releasedate || new Date().toISOString(),
+          source: 'jamendo' as const,
+          playbackType: 'audio-stream' as const,
+          audioStreamUrl: t.audio,
+          externalUrl: t.shareurl || 'https://www.jamendo.com',
           duration: durationStr,
-          audioStreamUrl: r.previewUrl,
           isEmbeddable: true,
         };
       });
@@ -128,17 +172,33 @@ export async function searchClientSidePublicMusic(query: string, signal?: AbortS
     return { items: [], totalResults: 0, query: '', source: 'all' };
   }
 
-  // Run Piped and iTunes queries concurrently
-  const [pipedItems, itunesItems] = await Promise.all([
-    searchPipedDirect(q, signal).catch(() => []),
-    searchItunesDirect(q, signal).catch(() => []),
-  ]);
+  // Prioritize Piped for full-length YouTube songs
+  const pipedItems = await searchPipedDirect(q, signal).catch(() => []);
+  if (pipedItems.length > 0) {
+    return {
+      items: pipedItems,
+      totalResults: pipedItems.length,
+      query: q,
+      source: 'all',
+    };
+  }
 
-  const items = pipedItems.length > 0 ? pipedItems : itunesItems;
+  // Next try Invidious for full-length YouTube songs
+  const invidiousItems = await searchInvidiousDirect(q, signal).catch(() => []);
+  if (invidiousItems.length > 0) {
+    return {
+      items: invidiousItems,
+      totalResults: invidiousItems.length,
+      query: q,
+      source: 'all',
+    };
+  }
 
+  // Fallback to Jamendo full-length songs
+  const jamendoItems = await searchJamendoDirect(q, signal).catch(() => []);
   return {
-    items,
-    totalResults: items.length,
+    items: jamendoItems,
+    totalResults: jamendoItems.length,
     query: q,
     source: 'all',
   };

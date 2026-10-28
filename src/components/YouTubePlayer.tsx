@@ -23,7 +23,6 @@ import {
   SkipForward,
   Sparkles,
   PictureInPicture2,
-  Music,
 } from 'lucide-react';
 import { UnifiedTrack } from '../types/index.ts';
 import {
@@ -35,7 +34,6 @@ import {
   generateSmartShuffleQueue,
 } from '../services/smartQueue.ts';
 import { backgroundAudioKeepAlive } from '../services/backgroundAudioKeepAlive.ts';
-import { cleanSongTitleToHinglish } from '../services/hindiTransliterator.ts';
 
 declare global {
   interface Window {
@@ -57,6 +55,12 @@ interface YouTubePlayerProps {
 // 1-second silent WAV base64 string to keep browser background audio session alive
 const SILENT_AUDIO_URI =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A';
+
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('musichub_audio_only_mode');
+  }
+} catch {}
 
 export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   currentTrack,
@@ -83,11 +87,6 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [isTheater, setIsTheater] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-
-  // Audio Mode (100% background-safe HTML5 audio that Chrome never pauses when minimized)
-  // DEFAULT TRUE: Every song opens directly in Audio Mode
-  const [isAudioOnlyMode, setIsAudioOnlyMode] = useState<boolean>(true);
-  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
 
   // Smart Shuffle and Loop States
   const [loopMode, setLoopMode] = useState<LoopMode>(() => getStoredLoopMode());
@@ -152,42 +151,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     try {
       localStorage.setItem('musichub_background_play', String(nextState));
     } catch {}
-    showToast(nextState ? '🎧 Background Play ON: Chrome minimize hone par Audio Mode use karein!' : 'Background Play OFF');
-  };
-
-  const toggleAudioOnlyMode = () => {
-    const nextState = !isAudioOnlyMode;
-    setIsAudioOnlyMode(nextState);
-    try {
-      localStorage.setItem('musichub_audio_only_mode', String(nextState));
-    } catch {}
-
-    if (nextState) {
-      if (playerRef.current) {
-        try { playerRef.current.pauseVideo?.(); } catch {}
-      }
-      setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.volume = isMuted ? 0 : volume / 100;
-          audioRef.current.play().catch(() => {});
-          setIsPlaying(true);
-        }
-      }, 80);
-      showToast('🎵 Pure Audio Mode: Chrome minimize hone par bhi 100% voice aati rahegi!');
-    } else {
-      if (audioRef.current) {
-        try { audioRef.current.pause(); } catch {}
-      }
-      if (playerRef.current) {
-        try {
-          playerRef.current.unMute?.();
-          playerRef.current.setVolume?.(volume || 100);
-          playerRef.current.playVideo?.();
-          setIsPlaying(true);
-        } catch {}
-      }
-      showToast('🎬 Video Mode Active');
-    }
+    showToast(nextState ? '🎧 Background Play ON: Gaana tabs aur background me chalta rahega!' : 'Background Play OFF');
   };
 
   const togglePictureInPicture = async () => {
@@ -220,59 +184,15 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
           }
         });
 
-        showToast('🪟 Floating Player: Chrome minimize hone par bhi floating window me chalta rahega!');
+        showToast('🪟 Floating Mini Player: Screen par float hoga, Chrome minimize hone par chalta rahega!');
         return;
       }
     } catch (err) {
       console.warn('PiP notice:', err);
     }
 
-    showToast('💡 Chrome minimize hone par sunne ke liye Audio Mode ON karein!');
+    showToast('💡 Background Play ON rakhein taaki tabs switch hone par gaana na ruke!');
   };
-
-  // Resolve direct high-fidelity audio stream whenever track changes
-  useEffect(() => {
-    if (!currentTrack) {
-      setResolvedAudioUrl(null);
-      return;
-    }
-
-    if (currentTrack.audioStreamUrl) {
-      setResolvedAudioUrl(currentTrack.audioStreamUrl);
-      return;
-    }
-
-    let active = true;
-    const cleanTitle = cleanSongTitleToHinglish(currentTrack.title);
-    const searchTerms = [
-      cleanTitle,
-      `${cleanTitle} ${currentTrack.channelTitle.replace(/official|vevo|records|music/gi, '').trim()}`,
-      currentTrack.title.replace(/\s*[\(\[\{][^\)\]\}]*[\)\]\}]/gi, '').trim(),
-    ].filter(Boolean);
-
-    const tryFetchAudio = async () => {
-      for (const term of searchTerms) {
-        if (!active) return;
-        try {
-          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=3`);
-          if (res.ok) {
-            const data = await res.json();
-            const match = (data.results || []).find((r: any) => r.previewUrl);
-            if (match?.previewUrl && active) {
-              setResolvedAudioUrl(match.previewUrl);
-              return;
-            }
-          }
-        } catch {}
-      }
-    };
-
-    tryFetchAudio();
-
-    return () => {
-      active = false;
-    };
-  }, [currentTrack]);
 
   // Record history when track changes
   useEffect(() => {
@@ -752,7 +672,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   if (!currentTrack) return null;
 
   const togglePlay = () => {
-    if (isAudioOnlyMode || currentTrack.playbackType === 'audio-stream') {
+    if (currentTrack.playbackType === 'audio-stream') {
       if (audioRef.current) {
         if (isPlaying) {
           userIntendedPlayingRef.current = false;
@@ -882,26 +802,6 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               </span>
             </button>
 
-            {/* Audio Mode Toggle (Pure HTML5 Audio: 100% immune to Chrome minimization) */}
-            <button
-              onClick={toggleAudioOnlyMode}
-              className={`p-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
-                isAudioOnlyMode
-                  ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-              title={
-                isAudioOnlyMode
-                  ? 'Audio Mode Active: Chrome minimize hone par bhi 100% sound aayegi (Video dekhne ke liye click karein)'
-                  : 'Switch to Pure Audio Mode (Chrome minimize par continuous playback)'
-              }
-            >
-              <Music className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-semibold">
-                {isAudioOnlyMode ? 'Audio Mode (ON)' : 'Watch Video'}
-              </span>
-            </button>
-
             {/* Document Picture-in-Picture / Floating Window Button */}
             <button
               onClick={togglePictureInPicture}
@@ -974,7 +874,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
           </div>
         </div>
 
-        {/* Video Viewport: Kept in DOM with active rendering to maintain audio session when minimized */}
+        {/* Video / Audio Viewport */}
         <div
           className={`relative bg-black transition-all duration-200 ${
             isMinimized
@@ -984,9 +884,9 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               : 'aspect-video'
           }`}
         >
-          {!isAudioOnlyMode && currentTrack.playbackType === 'youtube-iframe' ? (
+          {currentTrack.playbackType === 'youtube-iframe' ? (
             <>
-              {/* Target IFrame Div for YouTube Player API */}
+              {/* Target IFrame Div for YouTube Player API - plays complete full-length video and audio */}
               <div
                 ref={iframeContainerRef}
                 className={`w-full h-full ${playerError ? 'hidden' : 'block'}`}
@@ -1002,11 +902,10 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                   </p>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={toggleAudioOnlyMode}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg cursor-pointer"
+                      onClick={() => handleNextTrackRef.current()}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg cursor-pointer"
                     >
-                      <Music className="w-3.5 h-3.5" />
-                      Play in Pure Audio Mode
+                      Play Next Song
                     </button>
                     <a
                       href={currentTrack.externalUrl}
@@ -1022,28 +921,25 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               )}
             </>
           ) : (
-            /* Pure Audio Stream Mode (100% Background Safe: Chrome minimize hone par bhi nahi rukta) */
+            /* Royalty-Free Full Audio Stream (e.g. Jamendo) */
             <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-center relative overflow-hidden">
               <div className="relative mb-3 group">
                 <img
                   src={currentTrack.thumbnail}
                   alt={currentTrack.title}
-                  className={`w-24 h-24 sm:w-28 sm:h-28 rounded-2xl shadow-2xl object-cover border-2 border-amber-500/30 transition-transform duration-500 ${isPlaying ? 'scale-105' : 'scale-100 opacity-80'}`}
+                  className={`w-24 h-24 sm:w-28 sm:h-28 rounded-2xl shadow-2xl object-cover border-2 border-indigo-500/30 transition-transform duration-500 ${isPlaying ? 'scale-105' : 'scale-100 opacity-80'}`}
                 />
                 {isPlaying && (
                   <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-emerald-500/90 text-white font-semibold text-[10px] rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                    <span>Background Safe</span>
+                    <span>Playing Audio</span>
                   </div>
                 )}
               </div>
 
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-mono text-[10px] uppercase font-bold tracking-wider border border-amber-500/30">
-                  Pure Audio Stream
-                </span>
-                <span className="text-[11px] text-slate-400 hidden sm:inline">
-                  Chrome minimize hone par bhi chalta rahega
+                <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-mono text-[10px] uppercase font-bold tracking-wider border border-indigo-500/30">
+                  Full Audio Stream
                 </span>
               </div>
 
@@ -1055,7 +951,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                 {[40, 70, 95, 60, 85, 45, 90, 65, 30, 80, 55, 90].map((h, i) => (
                   <div
                     key={i}
-                    className="w-1 bg-gradient-to-t from-amber-500 to-amber-300 rounded-full transition-all duration-300"
+                    className="w-1 bg-gradient-to-t from-red-500 to-amber-300 rounded-full transition-all duration-300"
                     style={{
                       height: isPlaying ? `${h}%` : '20%',
                       opacity: isPlaying ? 0.9 : 0.3,
@@ -1066,7 +962,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
               <audio
                 ref={audioRef}
-                src={resolvedAudioUrl || currentTrack.audioStreamUrl || undefined}
+                src={currentTrack.audioStreamUrl || undefined}
                 autoPlay
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
