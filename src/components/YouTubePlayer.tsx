@@ -35,6 +35,7 @@ import {
   generateSmartShuffleQueue,
 } from '../services/smartQueue.ts';
 import { backgroundAudioKeepAlive } from '../services/backgroundAudioKeepAlive.ts';
+import { cleanSongTitleToHinglish } from '../services/hindiTransliterator.ts';
 
 declare global {
   interface Window {
@@ -84,13 +85,8 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
 
   // Audio Mode (100% background-safe HTML5 audio that Chrome never pauses when minimized)
-  const [isAudioOnlyMode, setIsAudioOnlyMode] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('musichub_audio_only_mode') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // DEFAULT TRUE: Every song opens directly in Audio Mode
+  const [isAudioOnlyMode, setIsAudioOnlyMode] = useState<boolean>(true);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
 
   // Smart Shuffle and Loop States
@@ -170,10 +166,25 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       if (playerRef.current) {
         try { playerRef.current.pauseVideo?.(); } catch {}
       }
-      showToast('🎵 Pure Audio Stream Active: Chrome minimize hone par bhi bilkul nahi rukega!');
+      setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.volume = isMuted ? 0 : volume / 100;
+          audioRef.current.play().catch(() => {});
+          setIsPlaying(true);
+        }
+      }, 80);
+      showToast('🎵 Pure Audio Mode: Chrome minimize hone par bhi 100% voice aati rahegi!');
     } else {
       if (audioRef.current) {
         try { audioRef.current.pause(); } catch {}
+      }
+      if (playerRef.current) {
+        try {
+          playerRef.current.unMute?.();
+          playerRef.current.setVolume?.(volume || 100);
+          playerRef.current.playVideo?.();
+          setIsPlaying(true);
+        } catch {}
       }
       showToast('🎬 Video Mode Active');
     }
@@ -232,18 +243,31 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     }
 
     let active = true;
-    const cleanQ = `${currentTrack.title} ${currentTrack.channelTitle}`
-      .replace(/official|video|lyric|audio|hd|4k|song|full/gi, '')
-      .trim();
+    const cleanTitle = cleanSongTitleToHinglish(currentTrack.title);
+    const searchTerms = [
+      cleanTitle,
+      `${cleanTitle} ${currentTrack.channelTitle.replace(/official|vevo|records|music/gi, '').trim()}`,
+      currentTrack.title.replace(/\s*[\(\[\{][^\)\]\}]*[\)\]\}]/gi, '').trim(),
+    ].filter(Boolean);
 
-    fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&entity=song&limit=1`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (active && data?.results?.[0]?.previewUrl) {
-          setResolvedAudioUrl(data.results[0].previewUrl);
-        }
-      })
-      .catch(() => {});
+    const tryFetchAudio = async () => {
+      for (const term of searchTerms) {
+        if (!active) return;
+        try {
+          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=3`);
+          if (res.ok) {
+            const data = await res.json();
+            const match = (data.results || []).find((r: any) => r.previewUrl);
+            if (match?.previewUrl && active) {
+              setResolvedAudioUrl(match.previewUrl);
+              return;
+            }
+          }
+        } catch {}
+      }
+    };
+
+    tryFetchAudio();
 
     return () => {
       active = false;
@@ -728,7 +752,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   if (!currentTrack) return null;
 
   const togglePlay = () => {
-    if (currentTrack.playbackType === 'audio-stream') {
+    if (isAudioOnlyMode || currentTrack.playbackType === 'audio-stream') {
       if (audioRef.current) {
         if (isPlaying) {
           userIntendedPlayingRef.current = false;
@@ -861,20 +885,20 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
             {/* Audio Mode Toggle (Pure HTML5 Audio: 100% immune to Chrome minimization) */}
             <button
               onClick={toggleAudioOnlyMode}
-              className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
                 isAudioOnlyMode
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
               title={
                 isAudioOnlyMode
-                  ? 'Pure Audio Mode Active: Chrome minimize hone par bhi 100% chalta rahega'
-                  : 'Audio Mode: Chrome minimize hone par bina ruke sunne ke liye click karein'
+                  ? 'Audio Mode Active: Chrome minimize hone par bhi 100% sound aayegi (Video dekhne ke liye click karein)'
+                  : 'Switch to Pure Audio Mode (Chrome minimize par continuous playback)'
               }
             >
               <Music className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline text-[11px] font-medium">
-                {isAudioOnlyMode ? 'Audio Stream' : 'Audio Mode'}
+              <span className="text-[11px] font-semibold">
+                {isAudioOnlyMode ? 'Audio Mode (ON)' : 'Watch Video'}
               </span>
             </button>
 
